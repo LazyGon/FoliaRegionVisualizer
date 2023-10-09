@@ -49,7 +49,7 @@ public class FoliaRegionSiro {
         points.add(new Vector2d(first.endX() << 8, first.endZ() << 8));
         int direction = 2; // top to bottom
 
-        while (!currentLine.isConnectedTo(first)) {
+        while (!currentLine.canConnectTo(first)) {
             int x = currentLine.endX();
             int z = currentLine.endZ();
             long nextSec = leftSideSectionKey(direction, x, z);

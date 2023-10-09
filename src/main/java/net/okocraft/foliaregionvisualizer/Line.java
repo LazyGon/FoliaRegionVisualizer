@@ -20,32 +20,36 @@ class Line {
         return startX;
     }
 
-    public void startX(int startX) {
+    public @NotNull Line startX(int startX) {
         this.startX = startX;
+        return this;
     }
 
     public int startZ() {
         return startZ;
     }
 
-    public void startZ(int startZ) {
+    public @NotNull Line startZ(int startZ) {
         this.startZ = startZ;
+        return this;
     }
 
     public int endX() {
         return endX;
     }
 
-    public void endX(int endX) {
+    public @NotNull Line endX(int endX) {
         this.endX = endX;
+        return this;
     }
 
     public int endZ() {
         return endZ;
     }
 
-    public void endZ(int endZ) {
+    public @NotNull Line endZ(int endZ) {
         this.endZ = endZ;
+        return this;
     }
 
     public @NotNull Line start(int x, int z) {
@@ -66,15 +70,6 @@ class Line {
         this.endX = endX;
         this.endZ = endZ;
         return this;
-    }
-
-    public @NotNull Line setReversed(Line target) {
-        set(target.endX, target.endZ, target.startX, target.startZ);
-        return this;
-    }
-
-    public boolean isConnectedTo(Line other) {
-        return other.startX() == this.endX() && other.startZ() == this.endZ();
     }
 
     public boolean canConnectTo(Line other) {
@@ -148,5 +143,15 @@ class Line {
         result = 31 * result + endZ;
 
         return result;
+    }
+
+    @Override
+    public String toString() {
+        return "Line{" +
+                "startX=" + startX +
+                ", startZ=" + startZ +
+                ", endX=" + endX +
+                ", endZ=" + endZ +
+                '}';
     }
 }

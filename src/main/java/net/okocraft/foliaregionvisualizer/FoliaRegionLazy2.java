@@ -9,6 +9,7 @@ import it.unimi.dsi.fastutil.objects.ObjectSet;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 class FoliaRegionLazy2 {
@@ -51,31 +52,28 @@ class FoliaRegionLazy2 {
     private static List<List<Line>> sortLines(Set<Line> lines) {
         List<List<Line>> closedLines = new ArrayList<>();
 
-        boolean outline = true;
-
         while (!lines.isEmpty()) {
 
             List<Line> closedLine = new ArrayList<>();
 
             Line line = null;
 
+            boolean clockwise = false;
+
             while (line == null || !line.canConnectTo(closedLine.get(0))) {
                 if (line == null) {
                     line = lines.stream()
-                            .min(outline
-                                    ? Comparator.<Line>comparingInt(l -> l.startZ()).thenComparingInt(l -> l.startX())
-                                    : Comparator.<Line>comparingInt(l -> l.startX()).thenComparingInt(l -> -l.startZ())
-                            )
+                            .min(Comparator.<Line>comparingInt(Line::startX).thenComparingInt(Line::startZ))
                             .orElseThrow();
+                    if (line.startZ() == line.endZ()) {
+                        clockwise = true;
+                    }
                 } else {
                     Line next = line.createNext();
-                    boolean clockwise = outline
-                            ? !lines.contains(next.createReversed())
-                            : lines.contains(next.createReversed());
-
-                    line = next.createRotated(clockwise);
+                    boolean rotateClockwise = clockwise != lines.contains(next.createReversed());
+                    line = next.createRotated(rotateClockwise);
                     if (!lines.contains(line)) {
-                        line = next.createRotated(!clockwise);
+                        line = next.createRotated(!rotateClockwise);
                     }
                 }
 
@@ -88,55 +86,88 @@ class FoliaRegionLazy2 {
             }
 
             closedLines.add(closedLine);
-
-            if (outline) {
-                outline = false;
-            }
         }
 
-        closedLines.sort(Comparator.<List<Line>>comparingInt(list -> list.get(0).startZ())
-                .thenComparingInt(list -> list.get(0).startX()));
+        closedLines.sort(Comparator.<List<Line>>comparingInt(list -> list.get(0).startX())
+                .thenComparingInt(list -> list.get(0).startZ()));
 
         return closedLines;
     }
 
     private static List<Line> withHalls(List<List<Line>> sortedLines) {
-        List<Line> result = new ArrayList<>(sortedLines.get(0));
+        List<Line> parent = new ArrayList<>(sortedLines.get(0));
 
-        for (List<Line> hall : sortedLines.subList(1, sortedLines.size())) {
-            Line firstLine = hall.get(0);
-            Line lastLine = hall.get(hall.size() - 1);
-            Line upperLine = result.stream()
+        for (List<Line> child : sortedLines.subList(1, sortedLines.size())) {
+            Line firstLine = child.get(0);
+
+            Optional<Line> optionalUpperLine = parent.stream()
                     .filter(l -> l.startZ() == l.endZ()
-                            && l.startX() <= firstLine.startX() && firstLine.startX() <= l.endX()
-                            && l.startZ() < firstLine.startZ()
-                    )
-                    .max(Comparator.comparingInt(l -> l.startZ()))
-                    .orElseThrow();
+                            && (l.startX() <= firstLine.startX() && firstLine.startX() <= l.endX()
+                                    || l.endX() <= firstLine.startX() && firstLine.startX() <= l.startX())
+                            && l.startZ() <= firstLine.startZ())
+                    .max(Comparator.comparingInt(Line::startZ));
 
-            if (upperLine.startX() < firstLine.startX() && firstLine.startX() < upperLine.endX()) {
-                Line secondHalf = upperLine.divide(firstLine.startX(), upperLine.startZ());
-                Line in = secondHalf.createCopy().connect(firstLine);
-                lastLine.connect(secondHalf);
+            if (optionalUpperLine.isEmpty()) {
+                continue;
+            }
 
-                int idx = result.indexOf(upperLine) + 1;
-                result.add(idx, secondHalf);
-                result.addAll(idx, hall);
-                result.add(idx, in);
+            Line lastLine = child.get(child.size() - 1);
+            Line upperLine = optionalUpperLine.get();
 
-            } else if (upperLine.startX() == firstLine.startX()) {
-                result.get(result.indexOf(upperLine) - 1).connect(firstLine);
-                lastLine.connect(upperLine);
-                result.addAll(result.indexOf(upperLine), hall);
+            if (upperLine.startX() < upperLine.endX()) {
 
-            } else if (upperLine.endX() == firstLine.startX()) {
-                Line in = result.get(result.indexOf(upperLine) + 1);
-                lastLine.endZ(in.endZ());
-                in.connect(firstLine);
-                result.addAll(result.indexOf(in) + 1, hall);
+                if (upperLine.startX() < lastLine.endX() && lastLine.endX() < upperLine.endX()) {
+                    Line secondHalf = upperLine.divide(lastLine.endX(), upperLine.startZ());
+                    Line out = firstLine.createCopy().endZ(secondHalf.endZ());
+                    firstLine.startZ(upperLine.endZ());
+
+                    int idx = parent.indexOf(upperLine) + 1;
+                    parent.add(idx, secondHalf);
+                    parent.add(idx, out);
+                    parent.addAll(idx, child);
+
+                } else if (upperLine.startX() == lastLine.endX()) {
+                    int idx = parent.indexOf(upperLine);
+                    child.add(child.remove(0));
+                    parent.get((idx - 1 + parent.size()) % parent.size()).endZ(child.get(0).endZ());
+                    firstLine.endZ(upperLine.startZ());
+                    parent.addAll(idx, child);
+
+                } else if (upperLine.endX() == lastLine.endX()) {
+                    int idx = (parent.indexOf(upperLine) + 1) % parent.size();
+                    parent.get(idx).startZ(lastLine.endZ());
+                    firstLine.startZ(upperLine.endZ());
+                    parent.addAll(idx, child);
+                }
+
+            } else {
+
+                if (upperLine.endX() < firstLine.startX() && firstLine.startX() < upperLine.startX()) {
+                    Line secondHalf = upperLine.divide(firstLine.startX(), upperLine.startZ());
+                    Line in = secondHalf.createCopy().end(firstLine.startX(), firstLine.startZ());
+                    lastLine.endZ(upperLine.endZ());
+
+                    int idx = parent.indexOf(upperLine) + 1;
+                    parent.add(idx, secondHalf);
+                    parent.addAll(idx, child);
+                    parent.add(idx, in);
+
+                } else if (upperLine.startX() == firstLine.startX()) {
+                    int idx = parent.indexOf(upperLine);
+                    parent.get((idx - 1 + parent.size()) % parent.size()).endZ(firstLine.startZ());
+                    lastLine.endZ(upperLine.startZ());
+                    parent.addAll(idx, child);
+
+                } else if (upperLine.endX() == firstLine.startX()) {
+                    int idx = (parent.indexOf(upperLine) + 1) % parent.size();
+                    child.add(0, child.remove(child.size() - 1));
+                    parent.get(idx).startZ(lastLine.startZ());
+                    lastLine.startZ(upperLine.endZ());
+                    parent.addAll(idx, child);
+                }
             }
         }
 
-        return result;
+        return parent;
     }
 }
